@@ -68,7 +68,7 @@ export default function Sidebar({ isOpen, setIsOpen }: {
           <Divider />
           {user && user?.role && (
             <List disablePadding>
-              {["intern", "middle_tester", "buyer", "admin", "owner", "sm", "moder"].includes(user?.role) && (
+              {["buyer", "admin", "owner"].includes(user?.role) && (
                 <Tooltip title={!isOpen ? "Трафик" : ""} placement="right">
                   <ListItem disablePadding>
                     <ListItemButton
