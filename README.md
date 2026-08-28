@@ -1,91 +1,61 @@
-# Parsers for brain.com.ua
+# Локальний запуск
 
-Three product parsers for [brain.com.ua](https://brain.com.ua/): Requests + BeautifulSoup, Selenium and Playwright. Parsed data is stored in PostgreSQL through Django ORM.
+## Що потрібно
 
-## What is collected
+- Python 3.12
+- Node.js 22 та npm
+- PostgreSQL 17 (SQL-дамп створено у PostgreSQL 17.2)
 
-- full product title
-- color
-- memory
-- manufacturer
-- regular price
-- sale price (or `None`)
-- photo URLs (list)
-- product code
-- reviews count
-- screen diagonal
-- display resolution
-- all characteristics from the product tab (dict)
+## 1. База даних
 
-## Stack
+Основний дамп зі структурою та тестовими даними: `database/database.sql`.
+Відновлюйте його у нову порожню базу — міграції та окреме наповнення даними після цього не потрібні.
+`database/database.dump` — той самий знімок в альтернативному форматі; для звичайного запуску достатньо SQL-файлу.
 
-- Python 3.9+
-- Django 4.2 + PostgreSQL
-- Requests / BeautifulSoup
-- Selenium
-- Playwright
+Із кореня проєкту:
 
-Selectors for BS4 are picked by class names. Selenium and Playwright use XPath only.
-
-## Project structure
-
-```text
-.
-├── parser_bs4.py          # direct product URL
-├── parser_selenium.py     # search on the homepage
-├── parser_playwright.py   # same flow as Selenium
-├── load_django.py         # Django bootstrap for scripts
-├── manage.py
-├── parser_app/            # Product model
-└── brain_parser/          # Django settings
+```powershell
+createdb -h localhost -p 5432 -U postgres -W -T template0 -E UTF8 traffic_test
+psql -h localhost -p 5432 -U postgres -W -d traffic_test -v ON_ERROR_STOP=1 -f .\database\database.sql
 ```
 
-## Setup
+`template0` — стандартний чистий шаблон PostgreSQL. Якщо `createdb` або `psql` не знайдено, додайте папку `bin` PostgreSQL до `PATH` або запустіть утиліти повним шляхом, наприклад `C:\Program Files\PostgreSQL\17\bin\psql.exe`.
 
-1. Create a virtual environment and install dependencies:
+## 2. Backend
 
-```bash
-pip install -r requirements.txt
-python -m playwright install chromium
+Конфіг зберігається у `backend/.env`, шаблон — `backend/.env.example`.
+Скопіюйте шаблон у `.env` та вкажіть доступи до створеної БД. `JWT__SECRET_KEY` може бути будь-яким довгим випадковим рядком для локального запуску.
+
+Backend потрібно запускати саме з папки `backend`, тому що звідти читається `.env`:
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python __main__.py
 ```
 
-2. Create a PostgreSQL database `brain_parser`. Default connection in `brain_parser/settings.py`:
+Для macOS/Linux замініть `Copy-Item` на `cp`, `py -3.12` на `python3.12`, а команду активації — на `source .venv/bin/activate`.
 
-```text
-HOST: 127.0.0.1
-PORT: 5432
-NAME: brain_parser
-USER: postgres
-PASSWORD: postgres
+API буде доступне на `http://localhost:8000`, документація — на `http://localhost:8000/docs`.
+
+## 3. Frontend
+
+Адреса API задається у `frontend/.env`, шаблон — `frontend/.env.example`. Значення має містити `/api` наприкінці адреси.
+
+У новому терміналі:
+
+```powershell
+cd frontend
+Copy-Item .env.example .env
+npm ci
+npm run dev
 ```
 
-3. Apply migrations:
+На macOS/Linux замініть `Copy-Item` на `cp`.
 
-```bash
-python manage.py migrate
-```
+Відкрийте `http://localhost:5173/login`, увійдіть під локальним тестовим обліковим записом `owner` / `owner` та перейдіть на `http://localhost:5173/traffic`.
 
-## Run parsers
-
-Requests / BeautifulSoup — product page:
-
-```bash
-python parser_bs4.py
-```
-
-URL: `https://brain.com.ua/ukr/Mobilniy_telefon_Apple_iPhone_16_Pro_Max_256GB_Black_Titanium-p1145443.html`
-
-Selenium and Playwright — homepage search `Apple iPhone 15 128GB Black`, click Find, open the first result:
-
-```bash
-python parser_selenium.py
-python parser_playwright.py
-```
-
-Each script prints a dict via `pprint` and saves the row with `get_or_create`.
-
-## Where results are stored
-
-PostgreSQL table: `parser_app_product`
-
-CSV export is done in pgAdmin: right-click the table → **Import/Export Data** → Export → CSV. No extra script is needed.
+Після зміни frontend-конфігу перезапустіть Vite. Для локального запуску використовуйте `localhost` і для frontend, і для backend: авторизація працює через cookie, тому не варто змішувати `localhost` та `127.0.0.1`.
