@@ -20,12 +20,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import {useAppDispatch, useAppSelector} from "../../utils/store/hooks.ts";
 import {getOffersTraffic} from "../../utils/API/offersAPI.ts";
 import TrafficRow from "./TrafficRow/TrafficRow.tsx";
+import PriceFactMaxIndicator from "../../components/PriceFactMaxIndicator/PriceFactMaxIndicator.tsx";
 import FiltersPopover from "./FiltersPopover/FiltersPopover.tsx";
 import DateRangeSelector from "../../components/DateRangeSelector/DateRangeSelector.tsx";
 import {trafficColumns} from "./columns.ts";
 import { useSort } from "../../utils/hooks/useSort.tsx";
 import getValueByPath from "../../utils/getValueByPath.ts";
-import {round, safeAvg, safePercentage} from "../../utils/math.ts";
+import {round, safeAvg, safePercentage, getFactMaxData} from "../../utils/math.ts";
 import {toggleValue} from "../../utils/toggleValue.ts";
 import usePersistToLocalStorage from "../../utils/hooks/usePersistToLocalStorage.tsx";
 
@@ -41,6 +42,7 @@ const Traffic = () => {
   const [loading, setLoading] = useState(false);
 
   const [buyers, setBuyers] = useState<string[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- traffic API row shape is large and ad-hoc
   const [data, setData] = useState<any[]>([]);
   const [exchangeRate, setExchangeRate] = useState<number>(0);
 
@@ -106,6 +108,18 @@ const Traffic = () => {
     visibleColumns
   ]);
 
+  // Precompute the "Цена fact-max" / "Минус" fields on each row so they can be
+  // sorted and summed like any other field, not just displayed.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- traffic API row shape is large and ad-hoc
+  const enrichTrafficData = (rows: any[]) =>
+    rows.map(row => ({
+      ...row,
+      first: {
+        ...row.first,
+        ...getFactMaxData(row.first.spend, row.first.approves_count, row.first.usd_median),
+      },
+    }));
+
   const fetchData = async () => {
     setLoading(true);
     const res = await dispatch(getOffersTraffic({ since: startDate, until: endDate, with_lifetime: withLifetime, with_month: withMonth }));
@@ -113,7 +127,7 @@ const Traffic = () => {
     if (res.success) {
       setExchangeRate(res.data.exchange_rate)
       setBuyers(res.data.buyer_ids)
-      setData(res.data.data);
+      setData(enrichTrafficData(res.data.data));
 
       if (selectedBuyers.length === 0) {
         setSelectedBuyers(res.data.buyer_ids)
@@ -136,7 +150,7 @@ const Traffic = () => {
     () => trafficColumns.filter(col =>
       !col.hideable || visibleColumns.includes(col.key)
     ),
-    [trafficColumns, visibleColumns]
+    [visibleColumns]
   );
 
   const sortedData = useMemo(() => {
@@ -161,7 +175,7 @@ const Traffic = () => {
       selectedStatuses.includes(row.status) &&
       (
         Array.isArray(row.marks)
-          ? row.marks.every(m => selectedMarks.includes(m.symbol))
+          ? row.marks.every((m: { symbol: string }) => selectedMarks.includes(m.symbol))
           : false
       )
     );
@@ -183,6 +197,7 @@ const Traffic = () => {
         acc.campaigns += row.campaigns;
         acc.usd_median += row.first.usd_median;
         acc.link_clicks += row.first.link_clicks;
+        acc.minus += row.first.minus;
         if (row.first.cr_percentage > 0 && row.first.cr_percentage <= 20) {
           acc.cr_percentage += row.first.cr_percentage
           acc.cr_percentage_count += 1
@@ -195,12 +210,13 @@ const Traffic = () => {
       {
         all_count: 0, clean_count: 0, approves_count: 0, trash_count: 0, approves_sum: 0, unprocessed_count: 0, preorder_count: 0,
         completed_count: 0, link_clicks: 0, spend: 0, conversion: 0, campaigns: 0, usd_median: 0,
-        cr_percentage: 0, cr_percentage_count: 0
+        cr_percentage: 0, cr_percentage_count: 0, minus: 0
       }
     );
 
     const approves_percentage = safePercentage(result.approves_count, result.all_count);
     const approves_median = safeAvg(result.approves_sum, result.approves_count);
+    const usd_median = round(approves_median * 1000 * exchangeRate);
 
     return {
       ...result,
@@ -211,11 +227,15 @@ const Traffic = () => {
       preorder_percentage: safePercentage(result.preorder_count, result.all_count),
       completed_percentage: safePercentage(result.completed_count, result.approves_count),
       cr_percentage: safeAvg(result.cr_percentage, result.cr_percentage_count),
-      usd_median: round(approves_median * 1000 * exchangeRate),
+      usd_median,
       spend: round(result.spend),
       lead_price: result.conversion > 0 ? round(result.spend / result.conversion) : 0,
+      // Total "Минус" is the sum of each row's own overspend, not recomputed from
+      // aggregate spend/approves — overspend is per-offer, not a portfolio average.
+      ...getFactMaxData(result.spend, result.approves_count, usd_median),
+      minus: round(result.minus),
     };
-  }, [displayedData]);
+  }, [displayedData, exchangeRate]);
 
   const resetFilters = () => {
     setSelectedBuyers(buyers);
@@ -233,13 +253,14 @@ const Traffic = () => {
 
       if (cached) {
         const data = JSON.parse(cached);
-        setData(data.data);
+        setData(enrichTrafficData(data.data));
         setBuyers(data.buyer_ids);
         setExchangeRate(data.exchange_rate)
       } else {
         fetchData();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally runs once on mount only
   }, []);
 
   usePersistToLocalStorage("trafficSortBy", sortBy);
@@ -259,7 +280,11 @@ const Traffic = () => {
   const onToggleRow = useCallback((id: string) => {
     setSelectedRows(prev => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
       return next;
     });
   }, []);
@@ -305,7 +330,7 @@ const Traffic = () => {
     return () => {
       if (currentRef) observer.unobserve(currentRef);
     };
-  }, [loaderRef.current, displayedData.length]);
+  }, [displayedData.length]);
 
   return (
     <Box id="portal-root">
@@ -478,6 +503,12 @@ const Traffic = () => {
                   {visibleColumns.includes("first.lead_price") && <TableCell>{summary.lead_price}$</TableCell>}
                   {visibleColumns.includes("campaigns") && <TableCell>{summary.campaigns}</TableCell>}
                   {visibleColumns.includes("first.usd_median") && <TableCell align="right">{summary.usd_median}$</TableCell>}
+                  {visibleColumns.includes("first.price_ratio") && (
+                    <TableCell align="center">
+                      <PriceFactMaxIndicator fact={summary.price_fact} max={summary.price_max} ratio={summary.price_ratio} />
+                    </TableCell>
+                  )}
+                  {visibleColumns.includes("first.minus") && <TableCell align="right">{summary.minus.toFixed(2)}$</TableCell>}
                 </TableRow>
               </TableFooter>
             </Table>

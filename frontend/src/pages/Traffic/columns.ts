@@ -1,4 +1,16 @@
-export const trafficColumns = [
+export type TrafficColumn = {
+  key: string;
+  label: string;
+  color: string;
+  fixed?: boolean;
+  width?: number;
+  left?: number;
+  sortable: boolean;
+  align: "left" | "right" | "center";
+  hideable: boolean;
+};
+
+export const trafficColumns: TrafficColumn[] = [
   { key: "selection", label: "", color: '#ffffff', fixed: true, width: 34, left: 0, sortable: false, align: "left", hideable: false },
   { key: "name", label: "Название", color: '#fffedc', fixed: true, width: 510, left: 34, sortable: true, align: "left", hideable: false },
   { key: "offer_id", label: "Поток", color: '#fffedc', fixed: true, width: 140, left: 544, sortable: true, align: "left", hideable: false },
@@ -25,4 +37,6 @@ export const trafficColumns = [
   { key: "first.lead_price", label: "За лид", color: '#d4ecff', sortable: true, align: "left", hideable: true },
   { key: "campaigns", label: "Актив.", color: '#d4ecff', sortable: true, align: "left", hideable: true },
   { key: "first.usd_median", label: "Сред. чек $", color: '#ecdcff', sortable: true, align: "right", hideable: true  },
+  { key: "first.price_ratio", label: "Цена fact-max", color: '#ffe0e0', sortable: true, align: "center", hideable: true },
+  { key: "first.minus", label: "Минус", color: '#ffe0e0', sortable: true, align: "right", hideable: true },
 ];

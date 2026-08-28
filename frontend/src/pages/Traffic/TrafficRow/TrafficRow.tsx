@@ -1,6 +1,7 @@
 import { memo, useCallback } from "react";
 import {TableRow, TableCell, Tooltip, Checkbox, Stack} from "@mui/material";
 import TagsCell from "../../../components/TagsCell/TagsCell.tsx";
+import PriceFactMaxIndicator from "../../../components/PriceFactMaxIndicator/PriceFactMaxIndicator.tsx";
 import {renderCRThreeFixed, renderThree, renderThreeFixed} from "../../../utils/math.ts";
 
 const TrafficRow = ({
@@ -111,6 +112,12 @@ const TrafficRow = ({
       {visibleColumns.includes("first.lead_price") && <TableCell className={bg("blue")}>{renderThreeFixed(row.first.lead_price, row.second.lead_price, row.third?.lead_price, "$")}</TableCell>}
       {visibleColumns.includes("campaigns") && <TableCell className={bg("blue")}>{row.campaigns}</TableCell>}
       {visibleColumns.includes("first.usd_median") && <TableCell align="right" className={bg("purple")}>{row.first.usd_median.toFixed(2)}$</TableCell>}
+      {visibleColumns.includes("first.price_ratio") && (
+        <TableCell align="center" className={bg()}>
+          <PriceFactMaxIndicator fact={row.first.price_fact} max={row.first.price_max} ratio={row.first.price_ratio} />
+        </TableCell>
+      )}
+      {visibleColumns.includes("first.minus") && <TableCell align="right" className={bg()}>{row.first.minus.toFixed(2)}$</TableCell>}
     </TableRow>
   );
 };
